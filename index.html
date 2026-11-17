@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GD&amp;T Interview Test — Geometric Dimensioning &amp; Tolerancing</title>
+<meta name="description" content="A timed, scored GD&amp;T interview test covering datums, degrees of freedom, feature control frames, MMC/LMC, datum shift, inspection tools and the rules of GD&amp;T.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="s-dia" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.2"/><path d="M4.5 19.5 19.5 4.5"/></symbol>
+  <symbol id="s-position" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.2"/><path d="M12 1.5v21M1.5 12h21"/></symbol>
+  <symbol id="s-straightness" viewBox="0 0 24 24"><path d="M2.5 12h19"/></symbol>
+  <symbol id="s-flatness" viewBox="0 0 24 24"><path d="M3 16 9 5.5h12L15 16Z"/></symbol>
+  <symbol id="s-circularity" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.4"/></symbol>
+  <symbol id="s-cylindricity" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.4"/><path d="M2 7.6h20M2 16.4h20"/></symbol>
+  <symbol id="s-perpendicularity" viewBox="0 0 24 24"><path d="M6 2.5v19h15.5"/></symbol>
+  <symbol id="s-parallelism" viewBox="0 0 24 24"><path d="M6.5 21 12.5 3M13 21 19 3"/></symbol>
+  <symbol id="s-angularity" viewBox="0 0 24 24"><path d="M2.5 20.5h19M5 20.5 15.5 4"/></symbol>
+  <symbol id="s-profile-surface" viewBox="0 0 24 24"><path d="M3 17.5a9 9 0 0 1 18 0Z"/></symbol>
+  <symbol id="s-profile-line" viewBox="0 0 24 24"><path d="M3 17.5a9 9 0 0 1 18 0"/></symbol>
+  <symbol id="s-concentricity" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.6"/><circle cx="12" cy="12" r="3.2"/></symbol>
+  <symbol id="s-runout" viewBox="0 0 24 24"><path d="M3.5 20.5 19 5"/><path d="M12.5 5H19v6.5"/></symbol>
+  <symbol id="s-total-runout" viewBox="0 0 24 24"><path d="M3.5 20.5 19 5"/><path d="M12.5 5H19v6.5"/><path d="M7.5 4.5 12 9"/></symbol>
+  <symbol id="s-mmc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><text x="12" y="12.6" text-anchor="middle" font-size="10" font-family="JetBrains Mono, monospace" fill="currentColor" stroke="none">M</text></symbol>
+  <symbol id="s-lmc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><text x="12" y="12.6" text-anchor="middle" font-size="10" font-family="JetBrains Mono, monospace" fill="currentColor" stroke="none">L</text></symbol>
+  <symbol id="s-rfs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><text x="12" y="12.6" text-anchor="middle" font-size="10" font-family="JetBrains Mono, monospace" fill="currentColor" stroke="none">S</text></symbol>
+  <symbol id="s-axes" viewBox="0 0 24 24"><path d="M12 12V2.5M12 12 3 19M12 12l9 7"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="s-datum" viewBox="0 0 24 24"><path d="M2 19.5h20"/><path d="M9.6 20 12 9.5 14.4 20Z"/><path d="M12 9.5V3"/></symbol>
+  <symbol id="s-frame" viewBox="0 0 24 24"><path d="M2.5 6.5h19v11h-19z"/><path d="M9.5 6.5v11M16 6.5v11"/></symbol>
+  <symbol id="s-shift" viewBox="0 0 24 24"><path d="M3 8.5h15"/><path d="M15 5.5 18 8.5 15 11.5"/><path d="M21 15.5H6"/><path d="M9 12.5 6 15.5 9 18.5"/></symbol>
+  <symbol id="s-gauge" viewBox="0 0 24 24"><circle cx="12" cy="10" r="6.2"/><path d="M12 10 15 7M12 16.2V20M7.5 20h9"/></symbol>
+  <symbol id="s-rule" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 12.5l2.8 2.8L16.5 9"/></symbol>
+</svg>
+
+<header class="topbar">
+  <div class="wrap topbar__in">
+    <span class="topbar__brand">GD&amp;T <span>//</span> INTERVIEW TEST</span>
+    <span class="topbar__meta">ASME Y14.5-2018</span>
+  </div>
+</header>
+
+<main class="wrap" id="app">
+
+  <!-- ============ START ============ -->
+  <section id="screen-start" class="screen">
+    <p class="eyebrow">Mechanical engineering · interview preparation</p>
+    <h1 class="hero">GD&amp;T <span>Interview Test</span></h1>
+    <p class="lede">
+      Questions interviewers actually ask about Geometric Dimensioning and Tolerancing — from
+      datums and degrees of freedom to feature control frames, MMC/LMC, datum shift and inspection.
+      You get a full score at the end, broken down by topic.
+    </p>
+
+    <div class="chips">
+      <span class="chip" id="chipCount">— questions</span>
+      <span class="chip">10 topics</span>
+      <span class="chip">Answer explanations</span>
+      <span class="chip">70% suggested pass mark</span>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <h2 class="field__title">Format</h2>
+        <div class="choices" role="radiogroup" aria-label="Test format">
+          <label class="choice">
+            <input type="radio" name="mode" value="exam" checked>
+            <span class="choice__body">
+              <span class="choice__name">Exam mode</span>
+              <span class="choice__desc">Answers are revealed with the final result, like a real written interview test.</span>
+            </span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="mode" value="practice">
+            <span class="choice__body">
+              <span class="choice__name">Practice mode</span>
+              <span class="choice__desc">See the correct answer and the explanation right after each question.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div class="field">
+        <h2 class="field__title">Length</h2>
+        <div class="segmented" role="radiogroup" aria-label="Number of questions">
+          <label><input type="radio" name="length" value="10"><span>10 questions</span></label>
+          <label><input type="radio" name="length" value="20" checked><span>20 questions</span></label>
+          <label><input type="radio" name="length" value="all"><span>Full test</span></label>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field__head">
+          <h2 class="field__title">Topics</h2>
+          <button type="button" class="linkbtn" id="toggleTopics">Clear all</button>
+        </div>
+        <div class="topic-grid" id="topicList"></div>
+        <p class="hint" id="topicHint" hidden>Select at least one topic to start.</p>
+      </div>
+
+      <div class="start-row">
+        <button type="button" class="btn btn--primary" id="startBtn">
+          Start the test
+          <svg viewBox="0 0 24 24" class="arrow" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+        </button>
+        <p class="fineprint">Questions are drawn at random from the selected topics, and answer positions are shuffled.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section id="screen-quiz" class="screen" hidden>
+    <div class="quizbar">
+      <span class="tag" id="qTopic"></span>
+      <div class="quizbar__right">
+        <span class="timer" id="timer">00:00</span>
+        <button type="button" class="linkbtn" id="endBtn">End test</button>
+      </div>
+    </div>
+
+    <div class="progress" aria-hidden="true"><div class="progress__fill" id="progressFill"></div></div>
+    <p class="counter"><span id="qCounter">Question 1 of 20</span> <span class="dot">·</span> <span id="qLevel">Core</span></p>
+
+    <div class="qcard">
+      <h2 class="qcard__text" id="qText"></h2>
+      <div class="options" id="optionList" role="group" aria-label="Answer options"></div>
+      <div class="feedback" id="feedback" hidden></div>
+    </div>
+
+    <div class="nav">
+      <button type="button" class="btn btn--ghost" id="prevBtn">Previous</button>
+      <button type="button" class="btn btn--primary" id="nextBtn">Next question</button>
+    </div>
+    <p class="fineprint center">Keyboard: A–D or 1–4 to answer, Enter to continue.</p>
+  </section>
+
+  <!-- ============ RESULT ============ -->
+  <section id="screen-result" class="screen" hidden>
+    <p class="eyebrow">Final result</p>
+
+    <div class="result-head">
+      <div class="ring-wrap">
+        <svg viewBox="0 0 120 120" class="ring" aria-hidden="true">
+          <circle cx="60" cy="60" r="52" class="ring__bg"></circle>
+          <circle cx="60" cy="60" r="52" class="ring__fg" id="ringFg"></circle>
+        </svg>
+        <div class="ring-label">
+          <strong id="scorePct">0%</strong>
+          <span id="scoreFraction">0 / 0</span>
+        </div>
+      </div>
+      <div class="result-copy">
+        <h1 class="result-title" id="verdict">—</h1>
+        <p class="lede" id="verdictText">—</p>
+        <div class="stat-row">
+          <div class="stat"><span class="stat__num" id="statCorrect">0</span><span class="stat__label">Correct</span></div>
+          <div class="stat"><span class="stat__num" id="statWrong">0</span><span class="stat__label">Incorrect</span></div>
+          <div class="stat"><span class="stat__num" id="statSkipped">0</span><span class="stat__label">Unanswered</span></div>
+          <div class="stat"><span class="stat__num" id="statTime">00:00</span><span class="stat__label">Time</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="field__title">Score by topic</h2>
+      <div class="topics-score" id="topicScores"></div>
+    </div>
+
+    <div class="review-head">
+      <h2 class="field__title">Answer review</h2>
+      <div class="tabs" id="reviewTabs">
+        <button type="button" class="tab is-active" data-filter="all">All</button>
+        <button type="button" class="tab" data-filter="wrong">Incorrect</button>
+      </div>
+    </div>
+    <div class="review" id="reviewList"></div>
+
+    <div class="nav">
+      <button type="button" class="btn btn--ghost" id="newBtn">Change settings</button>
+      <button type="button" class="btn btn--primary" id="retakeBtn">Retake the test</button>
+    </div>
+  </section>
+
+</main>
+
+<script src="questions.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
