@@ -599,8 +599,8 @@ function refreshCertCta() {
         ". Claim your certificate — it is issued with your name, the score, your time, today's date and a certificate ID.";
   } else if (canRedownload(claim)) {
     btn.textContent = "Download my certificate again";
-    text.textContent = "You retook the test. The certificate already issued to " + claim.name +
-      " can be downloaded again — its name, date and ID stay the same.";
+    text.textContent = "You retook the test. A certificate for this new score is issued to " +
+      claim.name + " — this attempt's result decides the type, the score and the time.";
   } else {
     btn.disabled = true;
     btn.textContent = "Certificate already claimed";
@@ -637,19 +637,36 @@ function issueCertificate(first, last) {
   showScreen("certificate");
 }
 
+/* A retake earns a certificate for that attempt: the name stays the one already
+   used, while the score, the kind (premium or standard), the time, the date and
+   the ID come from the run that was just finished. */
 function redownloadCertificate(claim) {
+  var elig = certEligibility();
+  if (!elig.ok) return;
+
   certRecord = {
-    kind: claim.kind === "standard" ? "standard" : "premium",
-    name: claim.name, date: claim.date, id: claim.id,
-    score: claim.score, correct: claim.correct, total: claim.total, seconds: claim.seconds
+    kind: elig.kind,
+    name: claim.name,
+    date: formatIssueDate(new Date()),
+    id: randomCertId(),
+    score: elig.pct,
+    correct: elig.correct,
+    total: elig.total,
+    seconds: elig.seconds
   };
   drawCertificate();
+
+  saveClaim({
+    name: certRecord.name, date: certRecord.date, id: certRecord.id, kind: certRecord.kind,
+    score: certRecord.score, correct: certRecord.correct, total: certRecord.total,
+    seconds: certRecord.seconds, attempt: state.attemptId, session: SESSION_ID,
+    issuedAt: Date.now()
+  });
+
+  closeCertModal();
+  refreshCertCta();
   showScreen("certificate");
   downloadCertificate();
-
-  claim.attempt = state.attemptId;
-  saveClaim(claim);
-  refreshCertCta();
 }
 
 function pad10(n) {
