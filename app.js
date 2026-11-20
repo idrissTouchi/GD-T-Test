@@ -11,6 +11,8 @@ const state = {
   answers: [],
   index: 0,
   mode: "exam",
+  attemptId: 0,
+  correct: 0,
   timer: null,
   elapsed: 0,
   startedAt: 0,
@@ -86,6 +88,7 @@ function startTest(settings) {
   shuffle(pool);
   var chosen = settings.length === "all" ? pool : pool.slice(0, Math.min(Number(settings.length), pool.length));
 
+  state.attemptId++;
   state.settings = { mode: settings.mode, length: settings.length, topics: settings.topics.slice() };
   state.mode = settings.mode;
   state.items = chosen.map(function (q) {
@@ -116,6 +119,7 @@ function startTimer() {
   state.timer = setInterval(function () {
     state.elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
     $("#timer").textContent = fmt(state.elapsed);
+    $("#timer").classList.toggle("is-over", state.elapsed >= CERT_TIME_LIMIT);
   }, 500);
 }
 
@@ -180,6 +184,7 @@ function renderQuestion() {
 
   $("#prevBtn").disabled = state.index === 0;
   $("#nextBtn").textContent = state.index === total - 1 ? "See my result" : "Next question";
+  $("#nextBtn").disabled = chosen === null;
 }
 
 function selectOption(i) {
@@ -191,6 +196,7 @@ function selectOption(i) {
 }
 
 function nextQuestion() {
+  if (state.answers[state.index] === null) return;
   if (state.index < state.items.length - 1) {
     state.index++;
     renderQuestion();
@@ -211,6 +217,7 @@ function prevQuestion() {
 /* ---------------- results ---------------- */
 
 function finishTest() {
+  if (state.startedAt) state.elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
   stopTimer();
   renderResults();
   showScreen("result");
@@ -250,9 +257,8 @@ function renderResults() {
   $("#statSkipped").textContent = skipped;
   $("#statTime").textContent = fmt(state.elapsed);
 
-  var perfect = total > 0 && correct === total;
-  $("#certCta").hidden = !perfect;
-  state.perfect = perfect;
+  state.correct = correct;
+  refreshCertCta();
 
   var circumference = 2 * Math.PI * 52;
   var ring = $("#ringFg");
@@ -336,10 +342,12 @@ function randomCertId() {
 }
 
 /* A visitor can claim the certificate once: the claim is remembered so the
-   name cannot be changed afterwards to issue another one. */
+   name cannot be changed afterwards to issue another one. Downloading it a
+   second time is only allowed after the test has been taken again. */
 var CERT_CLAIM_KEY = "gdt.certificate.claimed";
 
 var claimInMemory = null;
+var SESSION_ID = randomCertId();
 
 function claimedCertificate() {
   var stored = null;
@@ -348,16 +356,16 @@ function claimedCertificate() {
   return stored || claimInMemory;
 }
 
-function applyClaimState() {
-  var claim = claimedCertificate();
-  var btn = $("#certOpenBtn");
-  if (!claim || !btn) return;
-  btn.disabled = true;
-  btn.textContent = "Certificate already claimed";
-  btn.setAttribute("title", "Issued to " + claim.name + " on " + claim.date);
-  var note = $("#certCta .fineprint");
-  if (note) note.textContent = "This certificate was already issued to " + claim.name +
-    ". It cannot be claimed again, so the name cannot be changed.";
+function saveClaim(record) {
+  claimInMemory = record;
+  try { window.localStorage.setItem(CERT_CLAIM_KEY, JSON.stringify(record)); }
+  catch (e) { /* storage unavailable: the in-memory claim still holds */ }
+}
+
+/* Only a fresh attempt in this visit re-opens the download; going back to the
+   result of the attempt that already claimed it does not. */
+function canRedownload(claim) {
+  return !!claim && claim.session === SESSION_ID && claim.attempt < state.attemptId;
 }
 
 function openCertModal() {
@@ -371,49 +379,13 @@ function closeCertModal() {
   $("#certModal").hidden = true;
 }
 
-/* The certificate is the A4-landscape artwork plus the recipient name. */
+/* The certificate is one of two A4-landscape artworks: the premium one for a
+   perfect score and the standard one for 80-99%. */
 var CERT_W = 3508;
 var CERT_H = 2480;
-var certBackground = new Image();
-var certBackgroundReady = false;
-var certRecipient = "";
-var certDateText = "";
-var certIdText = "";
-
-certBackground.onload = function () {
-  certBackgroundReady = true;
-  drawCertificate();
-};
-certBackground.src = "cert-bg.jpg";
-
-function drawCertificate() {
-  var canvas = $("#certCanvas");
-  if (!canvas || !certBackgroundReady) return;
-
-  var ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, CERT_W, CERT_H);
-  ctx.drawImage(certBackground, 0, 0, CERT_W, CERT_H);
-  if (!certRecipient) return;
-
-  var size = 200;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = "#12178f";
-
-  for (;;) {
-    ctx.font = "700 " + size + 'px "Times New Roman", Georgia, "Liberation Serif", serif';
-    if (ctx.measureText(certRecipient).width <= 2260 || size <= 84) break;
-    size -= 4;
-  }
-
-  ctx.fillText(certRecipient, CERT_W / 2, 962);
-
-  // Issue date and unique certificate ID, sitting on the rules above their labels.
-  ctx.fillStyle = "#12178f";
-  ctx.font = '700 52px "Times New Roman", Georgia, "Liberation Serif", serif';
-  if (certDateText) ctx.fillText(certDateText, 1586, 2002);
-  if (certIdText) ctx.fillText(certIdText, 2250, 2002);
-}
+var CERT_TIME_LIMIT = 180;
+var CERT_MIN_SCORE = 80;
+var CERT_SERIF = '"Times New Roman", Georgia, "Liberation Serif", serif';
 
 var MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
@@ -423,19 +395,204 @@ function formatIssueDate(d) {
   return MONTH_NAMES[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
 }
 
+var certRecord = null;
+
+var certBackgrounds = {
+  premium: { img: new Image(), ready: false, src: "cert-bg.jpg" },
+  standard: { img: new Image(), ready: false, src: "cert-bg-less.jpg" }
+};
+
+Object.keys(certBackgrounds).forEach(function (kind) {
+  var bg = certBackgrounds[kind];
+  bg.img.onload = function () { bg.ready = true; drawCertificate(); };
+  bg.img.src = bg.src;
+});
+
+function drawCertificate() {
+  var canvas = $("#certCanvas");
+  if (!canvas || !certRecord) return;
+  var bg = certBackgrounds[certRecord.kind];
+  if (!bg || !bg.ready) return;
+
+  var ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, CERT_W, CERT_H);
+  ctx.drawImage(bg.img, 0, 0, CERT_W, CERT_H);
+
+  if (certRecord.kind === "premium") drawPremiumCertificate(ctx, certRecord);
+  else drawStandardCertificate(ctx, certRecord);
+}
+
+function certDetailLine(record) {
+  return record.correct + "/" + record.total + " correct answers in " + record.seconds + " s";
+}
+
+function drawPremiumCertificate(ctx, record) {
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = "#12178f";
+
+  var size = 200;
+  for (;;) {
+    ctx.font = "700 " + size + "px " + CERT_SERIF;
+    if (ctx.measureText(record.name).width <= 2260 || size <= 84) break;
+    size -= 4;
+  }
+  ctx.fillText(record.name, CERT_W / 2, 962);
+
+  ctx.fillStyle = "#3a3f8f";
+  ctx.font = "400 50px " + CERT_SERIF;
+  ctx.fillText(certDetailLine(record), CERT_W / 2, 1068);
+
+  // Issue date and unique certificate ID, centred over their labels.
+  ctx.fillStyle = "#12178f";
+  ctx.font = "700 52px " + CERT_SERIF;
+  ctx.fillText(record.date, 1584, 2002);
+  ctx.fillText(record.id, 2260, 2002);
+}
+
+function drawStandardCertificate(ctx, record) {
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#1b2f9c";
+
+  var size = 130;
+  for (;;) {
+    ctx.font = "700 " + size + "px " + CERT_SERIF;
+    if (ctx.measureText(record.name).width <= 1300 || size <= 72) break;
+    size -= 4;
+  }
+  ctx.fillText(record.name, CERT_W / 2, 972);
+
+  // The score fills the empty slot left in the banner, just before "/ 100".
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 200px " + CERT_SERIF;
+  ctx.fillText(String(record.score), 1640, 1690);
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#1b2f9c";
+  ctx.font = "400 52px " + CERT_SERIF;
+  ctx.fillText(certDetailLine(record), CERT_W / 2, 1840);
+
+  ctx.font = "700 52px " + CERT_SERIF;
+  ctx.fillText(record.date, 1587, 1988);
+  ctx.fillText(record.id, 2315, 1988);
+}
+
+/* Certificate rules: full test only, 80% or more, finished inside 3 minutes. */
+function certEligibility() {
+  var total = state.items.length;
+  var correct = state.correct || 0;
+  var pct = total ? Math.round(correct / total * 100) : 0;
+  var result = {
+    ok: false, reason: "score", kind: null,
+    pct: pct, correct: correct, total: total, seconds: state.elapsed
+  };
+
+  if (total !== QUESTIONS.length || pct < CERT_MIN_SCORE) return result;
+  if (state.elapsed >= CERT_TIME_LIMIT) { result.reason = "time"; return result; }
+
+  result.ok = true;
+  result.kind = pct === 100 ? "premium" : "standard";
+  return result;
+}
+
+function refreshCertCta() {
+  var cta = $("#certCta");
+  var locked = $("#certLocked");
+  if (!cta) return;
+
+  var elig = certEligibility();
+  var claim = claimedCertificate();
+  var btn = $("#certOpenBtn");
+  var eyebrow = $("#certCtaEyebrow");
+  var title = $("#certCtaTitle");
+  var text = $("#certCtaText");
+
+  if (!elig.ok) {
+    cta.hidden = true;
+    if (locked) {
+      if (elig.reason === "time") {
+        locked.textContent = "No certificate for this run: it is issued only for the full " +
+          QUESTIONS.length + "-question test finished in under 3 minutes, and this run took " +
+          fmt(state.elapsed) + ".";
+        locked.hidden = false;
+      } else {
+        locked.hidden = true;
+      }
+    }
+    return;
+  }
+
+  if (locked) locked.hidden = true;
+  cta.hidden = false;
+
+  eyebrow.textContent = elig.pct + "% · " +
+    (elig.kind === "premium" ? "Perfect score" : "Certificate earned");
+  title.textContent = elig.kind === "premium"
+    ? "You earned the premium certificate"
+    : "You earned the certificate";
+
+  btn.disabled = false;
+  if (!claim) {
+    btn.textContent = "Get your certificate";
+    text.textContent = elig.kind === "premium"
+      ? "All " + elig.total + " answers correct in " + fmt(elig.seconds) +
+        ". Claim the premium certificate — it is issued with your name, today's date and a unique certificate ID."
+      : "You scored " + elig.pct + "% in " + fmt(elig.seconds) +
+        ". Claim your certificate — it is issued with your name, the score, your time, today's date and a certificate ID.";
+  } else if (canRedownload(claim)) {
+    btn.textContent = "Download my certificate again";
+    text.textContent = "You retook the test. The certificate already issued to " + claim.name +
+      " can be downloaded again — its name, date and ID stay the same.";
+  } else {
+    btn.disabled = true;
+    btn.textContent = "Certificate already claimed";
+    text.textContent = "This certificate was already issued to " + claim.name + " on " + claim.date +
+      ". Retake the test to download it again.";
+  }
+}
+
 function issueCertificate(first, last) {
-  certRecipient = (first + " " + last).replace(/\s+/g, " ").trim();
-  certDateText = formatIssueDate(new Date());
-  certIdText = randomCertId();
+  var elig = certEligibility();
+  if (!elig.ok) return;
+
+  certRecord = {
+    kind: elig.kind,
+    name: (first + " " + last).replace(/\s+/g, " ").trim(),
+    date: formatIssueDate(new Date()),
+    id: randomCertId(),
+    score: elig.pct,
+    correct: elig.correct,
+    total: elig.total,
+    seconds: elig.seconds
+  };
   drawCertificate();
 
-  claimInMemory = { name: certRecipient, date: certDateText, id: certIdText };
-  try {
-    window.localStorage.setItem(CERT_CLAIM_KEY, JSON.stringify(claimInMemory));
-  } catch (e) { /* storage unavailable: the in-memory claim still holds */ }
-  applyClaimState();
+  saveClaim({
+    name: certRecord.name, date: certRecord.date, id: certRecord.id, kind: certRecord.kind,
+    score: certRecord.score, correct: certRecord.correct, total: certRecord.total,
+    seconds: certRecord.seconds, attempt: state.attemptId, session: SESSION_ID
+  });
+
   closeCertModal();
+  refreshCertCta();
   showScreen("certificate");
+}
+
+function redownloadCertificate(claim) {
+  certRecord = {
+    kind: claim.kind === "standard" ? "standard" : "premium",
+    name: claim.name, date: claim.date, id: claim.id,
+    score: claim.score, correct: claim.correct, total: claim.total, seconds: claim.seconds
+  };
+  drawCertificate();
+  showScreen("certificate");
+  downloadCertificate();
+
+  claim.attempt = state.attemptId;
+  saveClaim(claim);
+  refreshCertCta();
 }
 
 function pad10(n) {
@@ -530,7 +687,8 @@ function showDownloadNote() {
 
 function downloadCertificate() {
   var canvas = $("#certCanvas");
-  if (!canvas || !certBackgroundReady) {
+  var bg = certRecord && certBackgrounds[certRecord.kind];
+  if (!canvas || !certRecord || !bg || !bg.ready) {
     window.alert("The certificate is still loading. Please try again in a moment.");
     return;
   }
@@ -546,14 +704,14 @@ function downloadCertificate() {
   var bytes = new Uint8Array(binary.length);
   for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
-  var safeName = certRecipient.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  saveBlob(pdfFromJpeg(bytes, CERT_W, CERT_H), "GDT-Certificate-" + (safeName || "achievement") + ".pdf");
+  var safeName = certRecord.name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  var prefix = certRecord.kind === "premium" ? "GDT-Premium-Certificate-" : "GDT-Certificate-";
+  saveBlob(pdfFromJpeg(bytes, CERT_W, CERT_H), prefix + (safeName || "achievement") + ".pdf");
 }
 
 /* ---------------- events ---------------- */
 
 buildTopicPicker();
-applyClaimState();
 $("#chipCount").textContent = QUESTIONS.length + " questions";
 syncTopicLink();
 
@@ -591,7 +749,11 @@ $("#coursesStart").addEventListener("click", function () {
   showScreen("start");
 });
 
-$("#certOpenBtn").addEventListener("click", openCertModal);
+$("#certOpenBtn").addEventListener("click", function () {
+  var claim = claimedCertificate();
+  if (!claim) { openCertModal(); return; }
+  if (canRedownload(claim)) redownloadCertificate(claim);
+});
 $("#certCloseBtn").addEventListener("click", closeCertModal);
 
 $("#certModal").addEventListener("click", function (e) {
@@ -615,7 +777,10 @@ $("#certForm").addEventListener("submit", function (e) {
   issueCertificate(first, last);
 });
 
-$("#certBack").addEventListener("click", function () { showScreen("result"); });
+$("#certBack").addEventListener("click", function () {
+  refreshCertCta();
+  showScreen("result");
+});
 $("#certDownload").addEventListener("click", downloadCertificate);
 
 $("#prevBtn").addEventListener("click", prevQuestion);

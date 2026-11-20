@@ -123,6 +123,12 @@ body {
 }
 .panel + .panel { margin-top: 1.2rem; }
 
+.notice { margin-bottom: 1.2rem; background: #fffdf6; border-color: #e6dcbe; }
+.notice__list { margin: 0; padding-left: 1.15rem; display: grid; gap: 0.4rem; font-size: 0.85rem; line-height: 1.55; color: #4a4433; }
+.notice__list strong { color: var(--ink); }
+
+.cert-locked { margin: 0 0 1.2rem; font-size: 0.86rem; line-height: 1.55; color: #8a2b2b; }
+
 .field { margin-bottom: 1.7rem; }
 .field:last-of-type { margin-bottom: 1.2rem; }
 .field__head {
@@ -302,6 +308,7 @@ body {
   padding: 0.3rem 0.7rem 0.3rem 0.55rem;
 }
 .timer { font-family: var(--mono); font-size: 0.85rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.timer.is-over { color: #b42318; font-weight: 700; }
 
 .progress {
   height: 4px;

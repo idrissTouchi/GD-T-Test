@@ -67,6 +67,16 @@
       <span class="chip">70% suggested pass mark</span>
     </div>
 
+    <div class="panel notice">
+      <h2 class="field__title">How the certificates work</h2>
+      <ul class="notice__list">
+        <li><strong>Standard certificate</strong> — score 80% to 99% on the full 63-question test, finished in under 3 minutes.</li>
+        <li><strong>Premium certificate</strong> — score exactly 100% on the full 63-question test, finished in under 3 minutes.</li>
+        <li>Your name, the score, the number of correct answers, your time, the issue date and a unique certificate ID are printed on it.</li>
+        <li>The certificate is claimed once: it can only be downloaded again after you retake the test, and the name on it cannot be changed.</li>
+      </ul>
+    </div>
+
     <div class="panel">
       <div class="field">
         <h2 class="field__title">Format</h2>
@@ -214,15 +224,16 @@
 
     <div class="certcta" id="certCta" hidden>
       <div class="certcta__body">
-        <p class="eyebrow eyebrow--tight">100% · Perfect score</p>
-        <h2 class="certcta__title">You earned the certificate</h2>
-        <p class="fineprint">Every question was answered correctly. Claim your certificate of achievement — it is issued with your name, today's date and a unique certificate ID.</p>
+        <p class="eyebrow eyebrow--tight" id="certCtaEyebrow">100% · Perfect score</p>
+        <h2 class="certcta__title" id="certCtaTitle">You earned the certificate</h2>
+        <p class="fineprint" id="certCtaText">Every question was answered correctly. Claim your certificate of achievement — it is issued with your name, today's date and a unique certificate ID.</p>
       </div>
       <button type="button" class="btn btn--primary" id="certOpenBtn">
         Get your certificate
         <svg viewBox="0 0 24 24" class="arrow" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
       </button>
     </div>
+    <p class="cert-locked" id="certLocked" hidden></p>
 
     <div class="panel">
       <h2 class="field__title">Score by topic</h2>
