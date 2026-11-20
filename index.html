@@ -41,7 +41,10 @@
 <header class="topbar">
   <div class="wrap topbar__in">
     <span class="topbar__brand">GD&amp;T <span>//</span> INTERVIEW TEST</span>
-    <span class="topbar__meta">ASME Y14.5-2018</span>
+    <span class="topbar__nav">
+      <a class="topbar__link" href="#courses" id="coursesLink">My courses</a>
+      <span class="topbar__meta">ASME Y14.5-2018</span>
+    </span>
   </div>
 </header>
 
@@ -113,6 +116,49 @@
     </div>
   </section>
 
+  <!-- ============ COURSES ============ -->
+  <section id="screen-courses" class="screen" hidden>
+    <p class="eyebrow">Learn first · YouTube playlist</p>
+    <h1 class="hero">My GD&amp;T <span>video course</span></h1>
+    <p class="lede">
+      The complete GD&amp;T course for beginners, recorded as a YouTube playlist.
+      Watch the lessons here, then come back and test yourself on the exam.
+    </p>
+
+    <div class="panel course">
+      <div class="course__head">
+        <h2 class="course__title">GD&amp;T Course for Beginners</h2>
+        <span class="chip">YouTube playlist</span>
+      </div>
+
+      <div class="player">
+        <iframe
+          src="https://www.youtube.com/embed/videoseries?list=PLQBtkZkxZLy0"
+          title="GD&amp;T Course for Beginners — YouTube playlist"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          referrerpolicy="strict-origin-when-cross-origin"
+          allowfullscreen
+          loading="lazy"></iframe>
+      </div>
+
+      <div class="course__foot">
+        <p class="fineprint">Pick any lesson from the playlist inside the player, or open the playlist directly on YouTube to save it to your library.</p>
+        <a class="btn btn--primary" href="https://www.youtube.com/playlist?list=PLQBtkZkxZLy0" target="_blank" rel="noopener noreferrer">
+          Open on YouTube
+          <svg viewBox="0 0 24 24" class="arrow" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <div class="nav">
+      <button type="button" class="btn btn--ghost" id="coursesBack">Back</button>
+      <button type="button" class="btn btn--primary" id="coursesStart">
+        Take the test
+        <svg viewBox="0 0 24 24" class="arrow" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+  </section>
+
   <!-- ============ QUIZ ============ -->
   <section id="screen-quiz" class="screen" hidden>
     <div class="quizbar">
@@ -166,6 +212,18 @@
       </div>
     </div>
 
+    <div class="certcta" id="certCta" hidden>
+      <div class="certcta__body">
+        <p class="eyebrow eyebrow--tight">100% · Perfect score</p>
+        <h2 class="certcta__title">You earned the certificate</h2>
+        <p class="fineprint">Every question was answered correctly. Claim your certificate of achievement — it is issued with your name, today's date and a unique certificate ID.</p>
+      </div>
+      <button type="button" class="btn btn--primary" id="certOpenBtn">
+        Get your certificate
+        <svg viewBox="0 0 24 24" class="arrow" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+
     <div class="panel">
       <h2 class="field__title">Score by topic</h2>
       <div class="topics-score" id="topicScores"></div>
@@ -183,6 +241,58 @@
     <div class="nav">
       <button type="button" class="btn btn--ghost" id="newBtn">Change settings</button>
       <button type="button" class="btn btn--primary" id="retakeBtn">Retake the test</button>
+    </div>
+  </section>
+
+  <!-- ============ CERTIFICATE FORM ============ -->
+  <div class="modal" id="certModal" hidden>
+    <div class="modal__card" role="dialog" aria-modal="true" aria-labelledby="certModalTitle">
+      <div class="modal__head">
+        <div>
+          <h2 class="modal__title" id="certModalTitle">Claim your certificate</h2>
+          <p class="fineprint">Enter your name exactly as it should appear on the certificate.</p>
+        </div>
+        <button type="button" class="modal__close" id="certCloseBtn" aria-label="Close">&times;</button>
+      </div>
+
+      <form id="certForm" novalidate>
+        <div class="form-row">
+          <label class="form-field">
+            <span class="form-field__label">First name</span>
+            <input class="input" id="certFirst" name="first" type="text" autocomplete="given-name" placeholder="First name" required>
+          </label>
+          <label class="form-field">
+            <span class="form-field__label">Last name</span>
+            <input class="input" id="certLast" name="last" type="text" autocomplete="family-name" placeholder="Last name" required>
+          </label>
+        </div>
+
+        <p class="form-error" id="certError" hidden></p>
+
+        <div class="start-row">
+          <button type="submit" class="btn btn--primary">
+            Create my certificate
+            <svg viewBox="0 0 24 24" class="arrow" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+          </button>
+          <p class="fineprint">Issued instantly with today's date and a unique certificate ID.</p>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ CERTIFICATE ============ -->
+  <section id="screen-certificate" class="screen" hidden>
+    <div class="cert-actions">
+      <button type="button" class="linkbtn" id="certBack">&larr; Back to my result</button>
+      <button type="button" class="btn btn--primary" id="certDownload">
+        Download certificate (PDF)
+        <svg viewBox="0 0 24 24" class="arrow" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M4 19h16"/></svg>
+      </button>
+    </div>
+    <p class="cert-note" id="certNote" hidden></p>
+
+    <div class="cert-sheet">
+      <canvas id="certCanvas" width="3508" height="2480" role="img" aria-label="Certificate of achievement"></canvas>
     </div>
   </section>
 

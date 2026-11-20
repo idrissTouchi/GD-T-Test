@@ -14,7 +14,8 @@ const state = {
   timer: null,
   elapsed: 0,
   startedAt: 0,
-  reviewFilter: "all"
+  reviewFilter: "all",
+  returnTo: "start"
 };
 
 /* ---------------- helpers ---------------- */
@@ -39,11 +40,17 @@ function fmt(seconds) {
 }
 
 function showScreen(name) {
-  ["start", "quiz", "result"].forEach(function (n) {
+  ["start", "courses", "quiz", "result", "certificate"].forEach(function (n) {
     var el = $("#screen-" + n);
     if (el) el.hidden = n !== name;
   });
+  document.body.dataset.screen = name;
   window.scrollTo(0, 0);
+}
+
+function currentScreen() {
+  var el = $(".screen:not([hidden])");
+  return el ? el.id.replace("screen-", "") : "start";
 }
 
 /* ---------------- start screen ---------------- */
@@ -243,6 +250,10 @@ function renderResults() {
   $("#statSkipped").textContent = skipped;
   $("#statTime").textContent = fmt(state.elapsed);
 
+  var perfect = total > 0 && correct === total;
+  $("#certCta").hidden = !perfect;
+  state.perfect = perfect;
+
   var circumference = 2 * Math.PI * 52;
   var ring = $("#ringFg");
   ring.style.strokeDasharray = circumference;
@@ -305,9 +316,244 @@ function renderReview() {
     : '<p class="fineprint">Nothing here — every question was answered correctly.</p>';
 }
 
+/* ---------------- certificate ---------------- */
+
+var CERT_ID_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function randomCertId() {
+  var bytes = new Uint8Array(8);
+  if (window.crypto && window.crypto.getRandomValues) {
+    window.crypto.getRandomValues(bytes);
+  } else {
+    for (var b = 0; b < 8; b++) bytes[b] = Math.floor(Math.random() * 256);
+  }
+  var out = "";
+  for (var i = 0; i < 8; i++) {
+    if (i === 4) out += "-";
+    out += CERT_ID_CHARS.charAt(bytes[i] % CERT_ID_CHARS.length);
+  }
+  return "GDT-" + out;
+}
+
+/* A visitor can claim the certificate once: the claim is remembered so the
+   name cannot be changed afterwards to issue another one. */
+var CERT_CLAIM_KEY = "gdt.certificate.claimed";
+
+var claimInMemory = null;
+
+function claimedCertificate() {
+  var stored = null;
+  try { stored = JSON.parse(window.localStorage.getItem(CERT_CLAIM_KEY) || "null"); }
+  catch (e) { stored = null; }
+  return stored || claimInMemory;
+}
+
+function applyClaimState() {
+  var claim = claimedCertificate();
+  var btn = $("#certOpenBtn");
+  if (!claim || !btn) return;
+  btn.disabled = true;
+  btn.textContent = "Certificate already claimed";
+  btn.setAttribute("title", "Issued to " + claim.name + " on " + claim.date);
+  var note = $("#certCta .fineprint");
+  if (note) note.textContent = "This certificate was already issued to " + claim.name +
+    ". It cannot be claimed again, so the name cannot be changed.";
+}
+
+function openCertModal() {
+  if (claimedCertificate()) return;
+  $("#certError").hidden = true;
+  $("#certModal").hidden = false;
+  $("#certFirst").focus();
+}
+
+function closeCertModal() {
+  $("#certModal").hidden = true;
+}
+
+/* The certificate is the A4-landscape artwork plus the recipient name. */
+var CERT_W = 3508;
+var CERT_H = 2480;
+var certBackground = new Image();
+var certBackgroundReady = false;
+var certRecipient = "";
+var certDateText = "";
+var certIdText = "";
+
+certBackground.onload = function () {
+  certBackgroundReady = true;
+  drawCertificate();
+};
+certBackground.src = "cert-bg.jpg";
+
+function drawCertificate() {
+  var canvas = $("#certCanvas");
+  if (!canvas || !certBackgroundReady) return;
+
+  var ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, CERT_W, CERT_H);
+  ctx.drawImage(certBackground, 0, 0, CERT_W, CERT_H);
+  if (!certRecipient) return;
+
+  var size = 200;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = "#12178f";
+
+  for (;;) {
+    ctx.font = "700 " + size + 'px "Times New Roman", Georgia, "Liberation Serif", serif';
+    if (ctx.measureText(certRecipient).width <= 2260 || size <= 84) break;
+    size -= 4;
+  }
+
+  ctx.fillText(certRecipient, CERT_W / 2, 962);
+
+  // Issue date and unique certificate ID, sitting on the rules above their labels.
+  ctx.fillStyle = "#12178f";
+  ctx.font = '700 52px "Times New Roman", Georgia, "Liberation Serif", serif';
+  if (certDateText) ctx.fillText(certDateText, 1586, 2002);
+  if (certIdText) ctx.fillText(certIdText, 2250, 2002);
+}
+
+var MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+
+/* Date of issue from the visitor's own clock (local calendar day). */
+function formatIssueDate(d) {
+  return MONTH_NAMES[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+}
+
+function issueCertificate(first, last) {
+  certRecipient = (first + " " + last).replace(/\s+/g, " ").trim();
+  certDateText = formatIssueDate(new Date());
+  certIdText = randomCertId();
+  drawCertificate();
+
+  claimInMemory = { name: certRecipient, date: certDateText, id: certIdText };
+  try {
+    window.localStorage.setItem(CERT_CLAIM_KEY, JSON.stringify(claimInMemory));
+  } catch (e) { /* storage unavailable: the in-memory claim still holds */ }
+  applyClaimState();
+  closeCertModal();
+  showScreen("certificate");
+}
+
+function pad10(n) {
+  var s = String(n);
+  while (s.length < 10) s = "0" + s;
+  return s;
+}
+
+/* Build a one-page A4-landscape PDF that holds the rasterised certificate. */
+function pdfFromJpeg(jpegBytes, imgW, imgH) {
+  var pageW = 841.89;
+  var pageH = 595.28;
+  var enc = new TextEncoder();
+  var parts = [];
+  var offsets = [];
+  var length = 0;
+
+  function push(data) {
+    var bytes = typeof data === "string" ? enc.encode(data) : data;
+    parts.push(bytes);
+    length += bytes.length;
+  }
+
+  function begin(n) { offsets[n] = length; }
+
+  push("%PDF-1.4\n");
+
+  begin(1);
+  push("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+  begin(2);
+  push("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+  begin(3);
+  push("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + pageW + " " + pageH +
+    "] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>\nendobj\n");
+
+  var content = "q " + pageW + " 0 0 " + pageH + " 0 0 cm /Im0 Do Q\n";
+  begin(4);
+  push("4 0 obj\n<< /Length " + content.length + " >>\nstream\n" + content + "endstream\nendobj\n");
+
+  begin(5);
+  push("5 0 obj\n<< /Type /XObject /Subtype /Image /Width " + imgW + " /Height " + imgH +
+    " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + jpegBytes.length +
+    " >>\nstream\n");
+  push(jpegBytes);
+  push("\nendstream\nendobj\n");
+
+  var xrefStart = length;
+  var xref = "xref\n0 6\n0000000000 65535 f \n";
+  for (var i = 1; i <= 5; i++) xref += pad10(offsets[i]) + " 00000 n \n";
+  xref += "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n" + xrefStart + "\n%%EOF\n";
+  push(xref);
+
+  return new Blob(parts, { type: "application/pdf" });
+}
+
+function saveBlob(blob, fileName) {
+  var fileUrl = URL.createObjectURL(blob);
+  var link = document.createElement("a");
+  link.href = fileUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  // Embedded previews sandbox downloads and pop-ups away, so fall back to
+  // showing the PDF in place (where it can still be opened and saved).
+  var framed = false;
+  try { framed = window.top !== window.self; } catch (e) { framed = true; }
+  if (framed) {
+    var tab = null;
+    try { tab = window.open(fileUrl, "_blank"); } catch (e) { tab = null; }
+    if (!tab) showDownloadNote();
+  }
+
+  setTimeout(function () { URL.revokeObjectURL(fileUrl); }, framed ? 60000 : 5000);
+}
+
+/* Embedded previews block file downloads; tell the visitor where to save it. */
+function showDownloadNote() {
+  var note = $("#certNote");
+  if (!note) return;
+  note.textContent = "Your preview panel blocked the download. Open the app in a browser tab (";
+  var link = document.createElement("a");
+  link.href = window.location.href;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = window.location.origin;
+  note.appendChild(link);
+  note.appendChild(document.createTextNode(") and download again to save the PDF."));
+  note.hidden = false;
+}
+
+function downloadCertificate() {
+  var canvas = $("#certCanvas");
+  if (!canvas || !certBackgroundReady) {
+    window.alert("The certificate is still loading. Please try again in a moment.");
+    return;
+  }
+
+  var base64;
+  try {
+    base64 = canvas.toDataURL("image/jpeg", 0.95).split(",")[1];
+  } catch (e) {
+    window.alert("The certificate could not be exported: " + e.message);
+    return;
+  }
+  var binary = atob(base64);
+  var bytes = new Uint8Array(binary.length);
+  for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  var safeName = certRecipient.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  saveBlob(pdfFromJpeg(bytes, CERT_W, CERT_H), "GDT-Certificate-" + (safeName || "achievement") + ".pdf");
+}
+
 /* ---------------- events ---------------- */
 
 buildTopicPicker();
+applyClaimState();
 $("#chipCount").textContent = QUESTIONS.length + " questions";
 syncTopicLink();
 
@@ -330,6 +576,47 @@ $("#startBtn").addEventListener("click", function () {
   var length = ($('input[name="length"]:checked') || {}).value || "20";
   startTest({ mode: mode, length: length, topics: topics });
 });
+
+$("#coursesLink").addEventListener("click", function (e) {
+  e.preventDefault();
+  state.returnTo = currentScreen();
+  showScreen("courses");
+});
+
+$("#coursesBack").addEventListener("click", function () {
+  showScreen(state.returnTo || "start");
+});
+
+$("#coursesStart").addEventListener("click", function () {
+  showScreen("start");
+});
+
+$("#certOpenBtn").addEventListener("click", openCertModal);
+$("#certCloseBtn").addEventListener("click", closeCertModal);
+
+$("#certModal").addEventListener("click", function (e) {
+  if (e.target === $("#certModal")) closeCertModal();
+});
+
+$("#certForm").addEventListener("submit", function (e) {
+  e.preventDefault();
+  var first = $("#certFirst").value.trim();
+  var last = $("#certLast").value.trim();
+  var error = $("#certError");
+
+  if (!first || !last) {
+    error.textContent = "Please enter both your first name and last name.";
+    error.hidden = false;
+    (!first ? $("#certFirst") : $("#certLast")).focus();
+    return;
+  }
+
+  error.hidden = true;
+  issueCertificate(first, last);
+});
+
+$("#certBack").addEventListener("click", function () { showScreen("result"); });
+$("#certDownload").addEventListener("click", downloadCertificate);
 
 $("#prevBtn").addEventListener("click", prevQuestion);
 $("#nextBtn").addEventListener("click", nextQuestion);
@@ -359,6 +646,7 @@ $("#newBtn").addEventListener("click", function () {
 });
 
 document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape" && !$("#certModal").hidden) { closeCertModal(); return; }
   if ($("#screen-quiz").hidden) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
 
