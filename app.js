@@ -362,10 +362,13 @@ function saveClaim(record) {
   catch (e) { /* storage unavailable: the in-memory claim still holds */ }
 }
 
-/* Only a fresh attempt in this visit re-opens the download; going back to the
-   result of the attempt that already claimed it does not. */
+/* Only a new attempt re-opens the download, and it must have started after the
+   certificate was claimed — so retaking the test still works after a page
+   reload. Going back to the result of the attempt that claimed it does not. */
 function canRedownload(claim) {
-  return !!claim && claim.session === SESSION_ID && claim.attempt < state.attemptId;
+  if (!claim) return false;
+  if (!claim.issuedAt) return true; // claimed before the timestamp was stored
+  return !!state.startedAt && state.startedAt > claim.issuedAt;
 }
 
 function openCertModal() {
@@ -385,6 +388,10 @@ var CERT_W = 3508;
 var CERT_H = 2480;
 var CERT_TIME_LIMIT = 180;
 var CERT_MIN_SCORE = 80;
+
+/* Trial phase: short runs that also earn a certificate. Empty this list to
+   go back to the full test only. */
+var CERT_TRIAL_LENGTHS = [10];
 var CERT_SERIF = '"Times New Roman", Georgia, "Liberation Serif", serif';
 
 var MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
@@ -397,22 +404,59 @@ function formatIssueDate(d) {
 
 var certRecord = null;
 
+/* The artwork is ~1.8 MB each, so it is only fetched when a certificate is
+   actually being prepared — never on the start screen or during the test. */
 var certBackgrounds = {
-  premium: { img: new Image(), ready: false, src: "cert-bg.jpg" },
-  standard: { img: new Image(), ready: false, src: "cert-bg-less.jpg" }
+  premium: { img: null, ready: false, failed: false, waiters: [], src: "cert-bg.jpg" },
+  standard: { img: null, ready: false, failed: false, waiters: [], src: "cert-bg-less.jpg" }
 };
 
-Object.keys(certBackgrounds).forEach(function (kind) {
+function loadCertBackground(kind, done) {
   var bg = certBackgrounds[kind];
-  bg.img.onload = function () { bg.ready = true; drawCertificate(); };
+  if (!bg) return;
+  if (bg.ready) { done(); return; }
+
+  bg.waiters.push(done);
+  if (bg.img) return; // already downloading
+
+  bg.img = new Image();
+  bg.img.onload = function () {
+    bg.ready = true;
+    var list = bg.waiters; bg.waiters = [];
+    list.forEach(function (fn) { fn(); });
+  };
+  bg.img.onerror = function () {
+    bg.img = null; bg.failed = true;
+    bg.waiters = [];
+  };
   bg.img.src = bg.src;
-});
+}
+
+function setLoadingNote(on) {
+  var note = $("#certNote");
+  if (!note) return;
+  if (on) {
+    note.dataset.busy = "1";
+    note.textContent = "Preparing your certificate…";
+    note.hidden = false;
+  } else if (note.dataset.busy) {
+    delete note.dataset.busy;
+    note.hidden = true;
+    note.textContent = "";
+  }
+}
 
 function drawCertificate() {
   var canvas = $("#certCanvas");
   if (!canvas || !certRecord) return;
   var bg = certBackgrounds[certRecord.kind];
-  if (!bg || !bg.ready) return;
+  if (!bg) return;
+  if (!bg.ready) {
+    setLoadingNote(true);
+    if (!bg.failed) loadCertBackground(certRecord.kind, drawCertificate);
+    return;
+  }
+  setLoadingNote(false);
 
   var ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, CERT_W, CERT_H);
@@ -439,9 +483,10 @@ function drawPremiumCertificate(ctx, record) {
   }
   ctx.fillText(record.name, CERT_W / 2, 962);
 
+  // Score detail sits under the "100 / 100" banner, like the standard one.
   ctx.fillStyle = "#3a3f8f";
-  ctx.font = "400 50px " + CERT_SERIF;
-  ctx.fillText(certDetailLine(record), CERT_W / 2, 1068);
+  ctx.font = "400 52px " + CERT_SERIF;
+  ctx.fillText(certDetailLine(record), CERT_W / 2, 1840);
 
   // Issue date and unique certificate ID, centred over their labels.
   ctx.fillStyle = "#12178f";
@@ -479,7 +524,13 @@ function drawStandardCertificate(ctx, record) {
   ctx.fillText(record.id, 2315, 1988);
 }
 
-/* Certificate rules: full test only, 80% or more, finished inside 3 minutes. */
+function trialLengthText() {
+  if (!CERT_TRIAL_LENGTHS.length) return "";
+  return " (or " + CERT_TRIAL_LENGTHS.join("/") + " questions while the site is being tried out)";
+}
+
+/* Certificate rules: full test (plus the trial length, if any), 80% or more,
+   finished inside 3 minutes. */
 function certEligibility() {
   var total = state.items.length;
   var correct = state.correct || 0;
@@ -489,7 +540,8 @@ function certEligibility() {
     pct: pct, correct: correct, total: total, seconds: state.elapsed
   };
 
-  if (total !== QUESTIONS.length || pct < CERT_MIN_SCORE) return result;
+  var accepted = total === QUESTIONS.length || CERT_TRIAL_LENGTHS.indexOf(total) !== -1;
+  if (!accepted || pct < CERT_MIN_SCORE) return result;
   if (state.elapsed >= CERT_TIME_LIMIT) { result.reason = "time"; return result; }
 
   result.ok = true;
@@ -514,8 +566,8 @@ function refreshCertCta() {
     if (locked) {
       if (elig.reason === "time") {
         locked.textContent = "No certificate for this run: it is issued only for the full " +
-          QUESTIONS.length + "-question test finished in under 3 minutes, and this run took " +
-          fmt(state.elapsed) + ".";
+          QUESTIONS.length + "-question test" + trialLengthText() +
+          " finished in under 3 minutes, and this run took " + fmt(state.elapsed) + ".";
         locked.hidden = false;
       } else {
         locked.hidden = true;
@@ -526,6 +578,10 @@ function refreshCertCta() {
 
   if (locked) locked.hidden = true;
   cta.hidden = false;
+
+  // Warm the artwork while the visitor reads the result / types their name,
+  // so the certificate screen appears finished.
+  loadCertBackground(elig.kind, function () {});
 
   eyebrow.textContent = elig.pct + "% · " +
     (elig.kind === "premium" ? "Perfect score" : "Certificate earned");
@@ -572,7 +628,8 @@ function issueCertificate(first, last) {
   saveClaim({
     name: certRecord.name, date: certRecord.date, id: certRecord.id, kind: certRecord.kind,
     score: certRecord.score, correct: certRecord.correct, total: certRecord.total,
-    seconds: certRecord.seconds, attempt: state.attemptId, session: SESSION_ID
+    seconds: certRecord.seconds, attempt: state.attemptId, session: SESSION_ID,
+    issuedAt: Date.now()
   });
 
   closeCertModal();
@@ -688,7 +745,15 @@ function showDownloadNote() {
 function downloadCertificate() {
   var canvas = $("#certCanvas");
   var bg = certRecord && certBackgrounds[certRecord.kind];
-  if (!canvas || !certRecord || !bg || !bg.ready) {
+  if (!canvas || !certRecord || !bg) {
+    window.alert("The certificate is not ready yet. Please try again in a moment.");
+    return;
+  }
+  if (!bg.ready) {
+    if (!bg.failed) {
+      loadCertBackground(certRecord.kind, function () { drawCertificate(); downloadCertificate(); });
+      return;
+    }
     window.alert("The certificate is still loading. Please try again in a moment.");
     return;
   }

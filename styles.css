@@ -23,7 +23,7 @@
 
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: auto; }
 
 body {
   margin: 0;
@@ -34,7 +34,6 @@ body {
     linear-gradient(rgba(16, 24, 40, 0.045) 1px, transparent 1px),
     linear-gradient(90deg, rgba(16, 24, 40, 0.045) 1px, transparent 1px);
   background-size: 28px 28px;
-  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   line-height: 1.55;
 }
