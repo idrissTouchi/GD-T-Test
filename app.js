@@ -381,7 +381,8 @@ function writeCertificates(list) {
 
 function saveCertificate(record) {
   var list = readCertificates().filter(function (c) {
-    return c.id !== record.id && c.attempt !== record.attempt;
+    return c.id !== record.id &&
+      !(c.attempt === record.attempt && c.session === record.session);
   });
   list.push(record);
   if (list.length > CERT_HISTORY_LIMIT) list = list.slice(list.length - CERT_HISTORY_LIMIT);
@@ -402,7 +403,9 @@ function bestCertificate() {
 function certificateForAttempt(attemptId) {
   if (!attemptId) return null;
   var found = null;
-  readCertificates().forEach(function (c) { if (c.attempt === attemptId) found = c; });
+  readCertificates().forEach(function (c) {
+    if (c.attempt === attemptId && c.session === SESSION_ID) found = c;
+  });
   return found;
 }
 
@@ -435,12 +438,10 @@ function closeCertModal() {
    perfect score and the standard one for 80-99%. */
 var CERT_W = 3508;
 var CERT_H = 2480;
-var CERT_TIME_LIMIT = 180;
+/* A certificate is only issued for the full 63-question test taken in exam
+   mode, finished in under one hour; 80-99% is standard, 100% is premium. */
+var CERT_TIME_LIMIT = 3600;
 var CERT_MIN_SCORE = 80;
-
-/* Trial phase: short runs that also earn a certificate. Empty this list to
-   go back to the full test only. */
-var CERT_TRIAL_LENGTHS = [10];
 var CERT_SERIF = '"Times New Roman", Georgia, "Liberation Serif", serif';
 
 var MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
@@ -582,24 +583,20 @@ function drawStandardCertificate(ctx, record) {
   ctx.fillText(record.id, 2315, 1988);
 }
 
-function trialLengthText() {
-  if (!CERT_TRIAL_LENGTHS.length) return "";
-  return " (or " + CERT_TRIAL_LENGTHS.join("/") + " questions while the site is being tried out)";
-}
-
-/* Certificate rules: full test (plus the trial length, if any), 80% or more,
-   finished inside 3 minutes. */
+/* Certificate rules: the full 63-question test, taken in exam mode, answered
+   at 80% or more, finished in under one hour. Nothing else earns one. */
 function certEligibility() {
   var total = state.items.length;
   var correct = state.correct || 0;
   var pct = total ? Math.round(correct / total * 100) : 0;
   var result = {
-    ok: false, reason: "score", kind: null,
+    ok: false, reason: null, kind: null,
     pct: pct, correct: correct, total: total, seconds: state.elapsed
   };
 
-  var accepted = total === QUESTIONS.length || CERT_TRIAL_LENGTHS.indexOf(total) !== -1;
-  if (!accepted || pct < CERT_MIN_SCORE) return result;
+  if (state.mode !== "exam") { result.reason = "mode"; return result; } // practice never earns one
+  if (total !== QUESTIONS.length) { result.reason = "length"; return result; } // full test only
+  if (pct < CERT_MIN_SCORE) { result.reason = "score"; return result; }
   if (state.elapsed >= CERT_TIME_LIMIT) { result.reason = "time"; return result; }
 
   result.ok = true;
@@ -624,20 +621,26 @@ function refreshCertCta() {
 
   if (!elig.ok && !mine) {
     cta.hidden = true;
-    if (locked) {
-      if (elig.reason === "time") {
-        locked.textContent = "No certificate for this run: it is issued only for the full " +
-          QUESTIONS.length + "-question test" + trialLengthText() +
-          " finished in under 3 minutes, and this run took " + fmt(state.elapsed) + ".";
-        locked.hidden = false;
-      } else {
-        locked.hidden = true;
-      }
+    if (elig.reason === "mode") {
+      locked.textContent = "No certificate for this run: certificates are issued in exam mode " +
+        "only. Practice mode is for learning — take the full " + QUESTIONS.length +
+        "-question test in exam mode to earn one.";
+    } else if (elig.reason === "length") {
+      locked.textContent = "No certificate for this run: it is issued only for the full " +
+        QUESTIONS.length + "-question test, so select all topics and the full test length, " +
+        "then run it in exam mode.";
+    } else if (elig.reason === "score") {
+      locked.textContent = "No certificate for this run: it scored " + elig.pct +
+        "%. " + CERT_MIN_SCORE + "% is needed for the standard certificate and 100% for the premium one.";
+    } else {
+      locked.textContent = "No certificate for this run: the full test must be finished in " +
+        "under one hour, and this run took " + fmt(state.elapsed) + ".";
     }
+    locked.hidden = false;
     return;
   }
 
-  if (locked) locked.hidden = true;
+  locked.hidden = true;
   cta.hidden = false;
   btn.disabled = false;
 
