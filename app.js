@@ -341,38 +341,87 @@ function randomCertId() {
   return "GDT-" + out;
 }
 
-/* A visitor can claim the certificate once: the claim is remembered so the
-   name cannot be changed afterwards to issue another one. Downloading it a
-   second time is only allowed after the test has been taken again. */
-var CERT_CLAIM_KEY = "gdt.certificate.claimed";
+/* Every certificate issued on this device is kept: the home page offers the
+   best one and the visitor can go back to any of them at any time. The name is
+   taken from the first certificate issued here and can never be changed. */
+var CERT_HISTORY_KEY = "gdt.certificates";
+var CERT_CLAIM_KEY = "gdt.certificate.claimed"; // single-claim version, migrated below
+var CERT_HISTORY_LIMIT = 30;
 
-var claimInMemory = null;
+var memoryCertificates = [];
 var SESSION_ID = randomCertId();
 
-function claimedCertificate() {
-  var stored = null;
-  try { stored = JSON.parse(window.localStorage.getItem(CERT_CLAIM_KEY) || "null"); }
-  catch (e) { stored = null; }
-  return stored || claimInMemory;
+function readCertificates() {
+  var list = [];
+  try {
+    var raw = JSON.parse(window.localStorage.getItem(CERT_HISTORY_KEY) || "null");
+    if (Array.isArray(raw)) {
+      list = raw.filter(function (c) { return c && c.id && c.name; });
+    }
+  } catch (e) { list = []; }
+
+  // Older versions stored one claim only; fold it into the history once.
+  var legacy = null;
+  try { legacy = JSON.parse(window.localStorage.getItem(CERT_CLAIM_KEY) || "null"); }
+  catch (e) { legacy = null; }
+  if (legacy && legacy.id && legacy.name) {
+    var known = list.some(function (c) { return c.id === legacy.id; });
+    if (!known) list.push(legacy);
+    try { window.localStorage.removeItem(CERT_CLAIM_KEY); } catch (e) { /* ignore */ }
+  }
+
+  return list.length ? list : memoryCertificates.slice();
 }
 
-function saveClaim(record) {
-  claimInMemory = record;
-  try { window.localStorage.setItem(CERT_CLAIM_KEY, JSON.stringify(record)); }
-  catch (e) { /* storage unavailable: the in-memory claim still holds */ }
+function writeCertificates(list) {
+  memoryCertificates = list.slice();
+  try { window.localStorage.setItem(CERT_HISTORY_KEY, JSON.stringify(list)); }
+  catch (e) { /* storage unavailable: the in-memory history still holds */ }
 }
 
-/* Only a new attempt re-opens the download, and it must have started after the
-   certificate was claimed — so retaking the test still works after a page
-   reload. Going back to the result of the attempt that claimed it does not. */
-function canRedownload(claim) {
-  if (!claim) return false;
-  if (!claim.issuedAt) return true; // claimed before the timestamp was stored
-  return !!state.startedAt && state.startedAt > claim.issuedAt;
+function saveCertificate(record) {
+  var list = readCertificates().filter(function (c) {
+    return c.id !== record.id && c.attempt !== record.attempt;
+  });
+  list.push(record);
+  if (list.length > CERT_HISTORY_LIMIT) list = list.slice(list.length - CERT_HISTORY_LIMIT);
+  writeCertificates(list);
+  refreshHomeCertificate();
+}
+
+/* Best score on this device; a tie goes to the most recently issued one. */
+function bestCertificate() {
+  var best = null;
+  readCertificates().forEach(function (c) {
+    if (!best || c.score > best.score ||
+        (c.score === best.score && (c.issuedAt || 0) >= (best.issuedAt || 0))) best = c;
+  });
+  return best;
+}
+
+function certificateForAttempt(attemptId) {
+  if (!attemptId) return null;
+  var found = null;
+  readCertificates().forEach(function (c) { if (c.attempt === attemptId) found = c; });
+  return found;
+}
+
+function certificateById(id) {
+  var found = null;
+  readCertificates().forEach(function (c) { if (c.id === id) found = c; });
+  return found;
+}
+
+/* The name is fixed by the first certificate issued on this device. */
+function lockedName() {
+  var list = readCertificates();
+  if (!list.length) return "";
+  var first = list[0];
+  list.forEach(function (c) { if ((c.issuedAt || 0) < (first.issuedAt || 0)) first = c; });
+  return first.name || "";
 }
 
 function openCertModal() {
-  if (claimedCertificate()) return;
   $("#certError").hidden = true;
   $("#certModal").hidden = false;
   $("#certFirst").focus();
@@ -466,8 +515,17 @@ function drawCertificate() {
   else drawStandardCertificate(ctx, certRecord);
 }
 
+/* Minutes and seconds on the certificate itself, not a raw second count. */
+function formatDuration(total) {
+  var secs = Math.max(0, Math.round(total || 0));
+  var m = Math.floor(secs / 60);
+  var s = secs % 60;
+  if (!m) return s + " s";
+  return m + " min " + (s < 10 ? "0" + s : s) + " s";
+}
+
 function certDetailLine(record) {
-  return record.correct + "/" + record.total + " correct answers in " + record.seconds + " s";
+  return record.correct + "/" + record.total + " correct answers in " + formatDuration(record.seconds);
 }
 
 function drawPremiumCertificate(ctx, record) {
@@ -549,19 +607,22 @@ function certEligibility() {
   return result;
 }
 
+/* Where the certificate screen goes back to when it was opened from elsewhere. */
+var certReturnTo = "result";
+
 function refreshCertCta() {
   var cta = $("#certCta");
   var locked = $("#certLocked");
   if (!cta) return;
 
   var elig = certEligibility();
-  var claim = claimedCertificate();
+  var mine = certificateForAttempt(state.attemptId);
   var btn = $("#certOpenBtn");
   var eyebrow = $("#certCtaEyebrow");
   var title = $("#certCtaTitle");
   var text = $("#certCtaText");
 
-  if (!elig.ok) {
+  if (!elig.ok && !mine) {
     cta.hidden = true;
     if (locked) {
       if (elig.reason === "time") {
@@ -578,95 +639,123 @@ function refreshCertCta() {
 
   if (locked) locked.hidden = true;
   cta.hidden = false;
+  btn.disabled = false;
 
-  // Warm the artwork while the visitor reads the result / types their name,
-  // so the certificate screen appears finished.
-  loadCertBackground(elig.kind, function () {});
+  // Warm the artwork while the visitor reads the result, so the certificate
+  // screen appears finished.
+  loadCertBackground(mine ? mine.kind : elig.kind, function () {});
 
+  if (mine) {
+    eyebrow.textContent = mine.score + "% · " +
+      (mine.kind === "premium" ? "Premium certificate" : "Standard certificate");
+    title.textContent = "Your certificate is ready";
+    btn.textContent = "View my certificate";
+    text.textContent = "Issued to " + mine.name + " on " + mine.date +
+      ". Open it again at any time to view or download it — the name on it cannot be changed.";
+    return;
+  }
+
+  var name = lockedName();
   eyebrow.textContent = elig.pct + "% · " +
     (elig.kind === "premium" ? "Perfect score" : "Certificate earned");
   title.textContent = elig.kind === "premium"
     ? "You earned the premium certificate"
     : "You earned the certificate";
+  btn.textContent = "Get your certificate";
 
-  btn.disabled = false;
-  if (!claim) {
-    btn.textContent = "Get your certificate";
+  if (name) {
+    text.textContent = "You scored " + elig.pct + "% in " + fmt(elig.seconds) +
+      ". Your certificate will be issued to " + name + " — the name cannot be changed.";
+  } else {
     text.textContent = elig.kind === "premium"
       ? "All " + elig.total + " answers correct in " + fmt(elig.seconds) +
         ". Claim the premium certificate — it is issued with your name, today's date and a unique certificate ID."
       : "You scored " + elig.pct + "% in " + fmt(elig.seconds) +
         ". Claim your certificate — it is issued with your name, the score, your time, today's date and a certificate ID.";
-  } else if (canRedownload(claim)) {
-    btn.textContent = "Download my certificate again";
-    text.textContent = "You retook the test. A certificate for this new score is issued to " +
-      claim.name + " — this attempt's result decides the type, the score and the time.";
-  } else {
-    btn.disabled = true;
-    btn.textContent = "Certificate already claimed";
-    text.textContent = "This certificate was already issued to " + claim.name + " on " + claim.date +
-      ". Retake the test to download it again.";
   }
 }
 
-function issueCertificate(first, last) {
-  var elig = certEligibility();
-  if (!elig.ok) return;
+/* ---------------- home page certificate ---------------- */
 
-  certRecord = {
-    kind: elig.kind,
-    name: (first + " " + last).replace(/\s+/g, " ").trim(),
-    date: formatIssueDate(new Date()),
-    id: randomCertId(),
-    score: elig.pct,
-    correct: elig.correct,
-    total: elig.total,
-    seconds: elig.seconds
-  };
+function refreshHomeCertificate() {
+  var card = $("#myCertCard");
+  if (!card) return;
+
+  var best = bestCertificate();
+  card.hidden = !best;
+  if (!best) return;
+
+  $("#myCertEyebrow").textContent = best.kind === "premium"
+    ? "Premium certificate · perfect score"
+    : "Standard certificate";
+  $("#myCertName").textContent = best.name;
+  $("#myCertScore").textContent = best.score + "%";
+  $("#myCertMeta").textContent = best.correct + "/" + best.total + " correct · " +
+    formatDuration(best.seconds) + " · issued " + best.date + " · " + best.id;
+
+  var others = readCertificates().filter(function (c) { return c.id !== best.id; });
+  var listBox = $("#myCertList");
+  var details = $("#myCertHistory");
+  if (!listBox || !details) return;
+
+  others.sort(function (a, b) { return b.score - a.score || (b.issuedAt || 0) - (a.issuedAt || 0); });
+  $("#myCertCount").textContent = String(others.length);
+  details.hidden = !others.length;
+  if (!others.length) details.open = false;
+
+  listBox.innerHTML = others.map(function (c) {
+    return '<li class="certrow">' +
+      '<span class="certrow__kind">' + (c.kind === "premium" ? "Premium" : "Standard") + '</span>' +
+      '<span class="certrow__main"><strong>' + c.score + '%</strong> · ' +
+        c.correct + "/" + c.total + ' · ' + formatDuration(c.seconds) + '</span>' +
+      '<span class="certrow__meta">' + c.date + ' · ' + c.id + '</span>' +
+      '<button type="button" class="linkbtn certrow__btn" data-cert-id="' + c.id + '">Download PDF</button>' +
+      '</li>';
+  }).join("");
+}
+
+function showCertificate(record, from) {
+  if (!record) return;
+  certRecord = record;
+  certReturnTo = from || currentScreen();
+  $("#certBack").textContent = certReturnTo === "start" ? "\u2190 Back to the start" : "\u2190 Back to my result";
   drawCertificate();
-
-  saveClaim({
-    name: certRecord.name, date: certRecord.date, id: certRecord.id, kind: certRecord.kind,
-    score: certRecord.score, correct: certRecord.correct, total: certRecord.total,
-    seconds: certRecord.seconds, attempt: state.attemptId, session: SESSION_ID,
-    issuedAt: Date.now()
-  });
-
-  closeCertModal();
-  refreshCertCta();
   showScreen("certificate");
 }
 
-/* A retake earns a certificate for that attempt: the name stays the one already
-   used, while the score, the kind (premium or standard), the time, the date and
-   the ID come from the run that was just finished. */
-function redownloadCertificate(claim) {
+/* Download straight from the certificate list without leaving the home page. */
+function downloadCertificateById(id) {
+  var record = certificateById(id);
+  if (!record) return;
+  certRecord = record;
+  drawCertificate();
+  downloadCertificate();
+}
+
+/* A retake earns a certificate for that attempt: the score, the kind, the time
+   and the ID come from the run that was just finished, while the name stays the
+   one already on record. */
+function issueCertificate(name) {
   var elig = certEligibility();
   if (!elig.ok) return;
 
-  certRecord = {
+  var record = {
     kind: elig.kind,
-    name: claim.name,
+    name: name,
     date: formatIssueDate(new Date()),
     id: randomCertId(),
     score: elig.pct,
     correct: elig.correct,
     total: elig.total,
-    seconds: elig.seconds
-  };
-  drawCertificate();
-
-  saveClaim({
-    name: certRecord.name, date: certRecord.date, id: certRecord.id, kind: certRecord.kind,
-    score: certRecord.score, correct: certRecord.correct, total: certRecord.total,
-    seconds: certRecord.seconds, attempt: state.attemptId, session: SESSION_ID,
+    seconds: elig.seconds,
+    attempt: state.attemptId,
+    session: SESSION_ID,
     issuedAt: Date.now()
-  });
-
+  };
+  saveCertificate(record);
   closeCertModal();
   refreshCertCta();
-  showScreen("certificate");
-  downloadCertificate();
+  showCertificate(record, "result");
 }
 
 function pad10(n) {
@@ -796,6 +885,7 @@ function downloadCertificate() {
 buildTopicPicker();
 $("#chipCount").textContent = QUESTIONS.length + " questions";
 syncTopicLink();
+refreshHomeCertificate();
 
 $("#topicList").addEventListener("change", syncTopicLink);
 
@@ -832,9 +922,26 @@ $("#coursesStart").addEventListener("click", function () {
 });
 
 $("#certOpenBtn").addEventListener("click", function () {
-  var claim = claimedCertificate();
-  if (!claim) { openCertModal(); return; }
-  if (canRedownload(claim)) redownloadCertificate(claim);
+  var mine = certificateForAttempt(state.attemptId);
+  if (mine) { showCertificate(mine, "result"); return; }
+  if (!certEligibility().ok) return;
+  var name = lockedName();
+  if (name) { issueCertificate(name); return; }
+  openCertModal();
+});
+
+$("#myCertView").addEventListener("click", function () {
+  showCertificate(bestCertificate(), "start");
+});
+
+$("#myCertDownload").addEventListener("click", function () {
+  var best = bestCertificate();
+  if (best) downloadCertificateById(best.id);
+});
+
+$("#myCertList").addEventListener("click", function (e) {
+  var btn = e.target.closest("[data-cert-id]");
+  if (btn) downloadCertificateById(btn.dataset.certId);
 });
 $("#certCloseBtn").addEventListener("click", closeCertModal);
 
@@ -856,12 +963,12 @@ $("#certForm").addEventListener("submit", function (e) {
   }
 
   error.hidden = true;
-  issueCertificate(first, last);
+  issueCertificate((first + " " + last).replace(/\s+/g, " ").trim());
 });
 
 $("#certBack").addEventListener("click", function () {
-  refreshCertCta();
-  showScreen("result");
+  if (certReturnTo === "result") refreshCertCta();
+  showScreen(certReturnTo || "start");
 });
 $("#certDownload").addEventListener("click", downloadCertificate);
 

@@ -67,6 +67,48 @@
       <span class="chip">70% suggested pass mark</span>
     </div>
 
+    <div class="panel mycert" id="myCertCard" hidden>
+      <div class="mycert__top">
+        <div class="mycert__body">
+          <p class="eyebrow eyebrow--tight" id="myCertEyebrow">Standard certificate</p>
+          <h2 class="mycert__name" id="myCertName">—</h2>
+          <p class="fineprint" id="myCertMeta">—</p>
+        </div>
+        <div class="mycert__score">
+          <strong id="myCertScore">0%</strong>
+          <span>best score</span>
+        </div>
+      </div>
+
+      <div class="mycert__actions">
+        <button type="button" class="btn btn--ghost" id="myCertView">View certificate</button>
+        <button type="button" class="btn btn--primary" id="myCertDownload">
+          Download PDF
+          <svg viewBox="0 0 24 24" class="arrow" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M4 19h16"/></svg>
+        </button>
+      </div>
+
+      <details class="certlist" id="myCertHistory" hidden>
+        <summary>Other certificates earned (<span id="myCertCount">0</span>)</summary>
+        <ul class="certlist__items" id="myCertList"></ul>
+      </details>
+    </div>
+
+    <div class="panel guide">
+      <div class="guide__body">
+        <p class="eyebrow eyebrow--tight">Free download · PDF</p>
+        <h2 class="guide__title">GDT Illustrated Study Guide</h2>
+        <p class="fineprint">
+          The illustrated guide that goes with these ten lessons — every symbol, feature control frame
+          and worked example in one document you can keep and read offline.
+        </p>
+      </div>
+      <a class="btn btn--primary" href="GDT_Illustrated_Study_Guide.pdf" download="GDT_Illustrated_Study_Guide.pdf">
+        Download the PDF
+        <svg viewBox="0 0 24 24" class="arrow" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M4 19h16"/></svg>
+      </a>
+    </div>
+
     <div class="panel notice">
       <h2 class="field__title">How the certificates work</h2>
       <ul class="notice__list">
@@ -309,6 +351,29 @@
   </section>
 
 </main>
+
+<footer class="footer">
+  <div class="wrap footer__in">
+    <div class="creator">
+      <img class="creator__photo" src="mypic2.jpg" alt="Mr. Idriss Touchi" width="84" height="84" loading="lazy">
+      <div class="creator__copy">
+        <p class="eyebrow eyebrow--tight">Created by</p>
+        <p class="creator__name">MR. IDRISS TOUCHI</p>
+        <p class="creator__role">Mechanical engineer · GD&amp;T instructor</p>
+        <p class="fineprint">This exam was created by Mr. Idriss Touchi, with explanations written for engineers preparing for a GD&amp;T interview.</p>
+      </div>
+    </div>
+
+    <div class="subscribe">
+      <p class="subscribe__title">Watch the lessons on YouTube</p>
+      <p class="fineprint">New GD&amp;T lessons and worked examples — subscribe to follow the whole course.</p>
+      <a class="btn btn--yt" href="https://www.youtube.com/channel/UCjmvtSM8wWPjocflZAh8xmw" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24" class="yt" aria-hidden="true"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.8 1.8C5.8 19 12 19 12 19s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8ZM10 15.2V8.8l5.5 3.2Z"/></svg>
+        Subscribe on YouTube
+      </a>
+    </div>
+  </div>
+</footer>
 
 <script src="questions.js"></script>
 <script src="app.js"></script>
